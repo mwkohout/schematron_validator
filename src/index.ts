@@ -5,17 +5,16 @@ import * as fs from 'fs';
 import *  as xmldom from 'xmldom';
 import * as xpath from 'xpath';
 import * as schematron from 'node-schematron';
+import { Pattern } from 'node-schematron/dist/Pattern';
 
 const schematronNs = 'http://purl.oclc.org/dsdl/schematron';
 
 
 class NamedPattern {
-    constructor(name: string, patternNode: Element) {
-        this.name = name;
-        this.patternNode = patternNode;
+    constructor(patternNodes: Element[]) {
+        this.patternNodes = patternNodes;
     }
-    name: string;
-    patternNode: Element;
+    patternNodes: Element[];
 
     validate(instanceDoc: string): boolean {
         const serializer = new xmldom.XMLSerializer();
@@ -23,7 +22,7 @@ class NamedPattern {
         // Wrap the pattern in a complete schema structure
         const schemaXml = `
       <schema xmlns="http://purl.oclc.org/dsdl/schematron">
-        ${serializer.serializeToString(this.patternNode)}
+        ${this.patternNodes.map(e => serializer.serializeToString(e)).join("\n")}
       </schema>
     `;
 
@@ -58,6 +57,7 @@ program
 
     .action((schemaFilePath: string, instanceFilePath: string) => {
 
+        console.log(`Validating instance document: ${instanceFilePath} against schema: ${schemaFilePath}`);
         const schemaXml = fs.readFileSync(schemaFilePath, 'utf-8');
 
         const instanceXml = fs.readFileSync(instanceFilePath, 'utf-8');
@@ -70,31 +70,18 @@ program
             schemaDoc
         ) as Element[];
 
-        console.log(`Found ${patternNodes.length} patterns in the schema.`);
-        let patterns_by_name = (patternNodes as Element[])?.map((node: Element) => {
-
-            const name = node.getAttribute('id') || node.getAttribute('name') || 'UnnamedPattern';
-            return new NamedPattern(name, node);
-
-        });
-
-        let isValid = patterns_by_name.reduce((isValid, pattern) => {
-            if (!pattern.validate(instanceXml)) {
-                console.error(`Pattern ${pattern.name} is invalid.`);
-                return false;
-            }
-            return isValid;
-        }, true);
+        let test = new NamedPattern(patternNodes);
 
 
-        if (isValid) {
-            console.log('All patterns are valid.');
-        } else {
+
+        if (!test.validate(instanceXml)) {
+
             console.error('Some patterns are invalid.');
             process.exit(1);
         }
-    });
 
+
+    })
 
 
 program.parse(process.argv);
